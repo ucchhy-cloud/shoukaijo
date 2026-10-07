@@ -91,6 +91,8 @@
   .xr-title b { font-size: 20pt; font-weight: normal; letter-spacing: .05em; }
   .xr-no { display: flex; justify-content: space-between; font-size: 7pt; margin-bottom: .5mm; }
   .xr table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .xr table + table { margin-top: -.35mm; }  /* 区画の表を重ねて境目の線を1本にする */
+  .xr .doc { white-space: nowrap; font-size: 10.5pt; }
   .xr td { border: .35mm solid #000; padding: .3mm 1mm; vertical-align: top; overflow: hidden; }
   .xr .c { text-align: center; vertical-align: middle; }
   .xr .tiny { font-size: 7pt; }
@@ -321,6 +323,8 @@ const PROGRESS = [
 ];
 
 const REQUESTS = ["ご精査", "ご加療", "画像検査（レントゲン）", "MRI検査", "投薬のご検討", "診断書のご作成"];
+// 依頼内容の最後に並ぶボタン。押すと依頼の文がこの文だけになる（他の依頼内容のボタンは外れる）
+const REQ_FOLLOWUP = { label: "骨折の経過観察（2回目以降）", text: "経過の精査の必要があればお願いいたします。" };
 
 // レントゲン照射録（新橋青木クリニック）の撮影部位。cols は照射録の3つの欄（部位・方向・詳細）
 const XRAY_PRESETS = [
@@ -409,7 +413,8 @@ function composePurpose(f) {
   if (fx.length) body += `現在、${fx.join("、")}を認めます。`;
   if (f.progress) body += f.progress;
   const reqs = [...f.requests, ...splitList(f.reqFree)];
-  const lead = f.suspect ? "上記の疑いがあるため、必要であれば" : "つきましては、";
+  if (f.followUp) { out.push(body + REQ_FOLLOWUP.text); return out.join("\n"); }
+  const lead = f.suspect ? "上記の疑いがあるため、必要であれば" : "つきましては必要であれば";
   body += reqs.length ? `${lead}${reqs.join("・")}のほど、よろしくお願いします。`
                       : "よろしくお願いします。";
   out.push(body);
@@ -501,35 +506,35 @@ function xrayFormHtml(f, x) {
   const order = !x ? "" : x.presets.map(c => `<div class="ln"><span>${e(c[0])}</span><span>${e(c[1])}</span><span>${e(c[2])}</span></div>`).join("")
     + x.free.map(t => `<div class="free">${e(t)}</div>`).join("")
     + (x.note ? `<div class="note">${e(XRAY_NOTE)}</div>` : "");
-  const W = [581, 1162, 290, 872, 580, 290, 292, 290, 290, 290, 292, 1161];
-  const cols = W.map(w => `<col style="width:${(w / 6390 * 100).toFixed(2)}%">`).join("");
+  // 区画ごとに別の表にする（1枚の表で結合セルが多いと、印刷時に列の境目の線が結合セルの中に出るブラウザがあるため）
   const mm = tw => (tw / 56.7).toFixed(1) + "mm";
+  const tbl = (W, rows) => `<table><colgroup>${W.map(w => `<col style="width:${(w / 6390 * 100).toFixed(2)}%">`).join("")}</colgroup>${rows}</table>`;
+  const F = [1162, 1162, 1162, 1162, 1161];  // フィルムの5列
   return `<div class="xr">
     <div class="xr-title"><small>フィルム</small><b>放射線照射録</b></div>
     <div class="xr-no"><span>No.</span><span>新橋青木クリニック</span></div>
-    <table><colgroup>${cols}</colgroup>
-      <tr style="height:${mm(490)}"><td colspan="3" class="c" style="text-align:left">ＩＤ</td>
-        <td colspan="8"><div class="tabs"><span>令和</span><span>${e(f.XY)}年</span><span>${e(f.XM)}月</span><span>${e(f.XD)}日</span></div></td>
-        <td class="c">内科</td></tr>
-      <tr style="height:${mm(245)}"><td rowspan="2" class="c v">氏名</td>
-        <td colspan="10" rowspan="2" class="name"><span class="nm">${e(f.XNAME)}</span>
+    ${tbl([2033, 3196, 1161], `<tr style="height:${mm(490)}"><td class="c" style="text-align:left">ＩＤ</td>
+        <td><div class="tabs"><span>令和</span><span>${e(f.XY)}年</span><span>${e(f.XM)}月</span><span>${e(f.XD)}日</span></div></td>
+        <td class="c">内科</td></tr>`)}
+    ${tbl([581, 4648, 1161], `<tr style="height:${mm(245)}"><td rowspan="2" class="c v">氏名</td>
+        <td rowspan="2" class="name"><span class="nm">${e(f.XNAME)}</span>
           <span class="m"><span class="tiny">${e(f.XMALE)}</span> 様</span><span class="f tiny">${e(f.XFEMALE)}</span>
           <span class="age tiny">${e(f.XAGE)}才</span></td>
         <td class="tiny">外来</td></tr>
-      <tr style="height:${mm(245)}"><td class="tiny">Ｈ Ｄ</td></tr>
-      <tr style="height:${mm(490)}"><td class="c v tiny">生年月日</td>
-        <td colspan="7"><div class="tabs"><span>${e(f.XERA)}</span><span>${e(f.XBY)}年</span><span>${e(f.XBM)}月</span><span>${e(f.XBD)}日</span></div></td>
-        <td class="c v tiny">住所</td><td colspan="3"></td></tr>
-      <tr style="height:${mm(247)}"><td rowspan="6" class="c v">指示事項</td>
-        <td colspan="11" class="c tiny" style="letter-spacing:.6em">撮影部位と方向を記入して下さい</td></tr>
-      <tr style="height:${mm(3917)}"><td colspan="11" class="order">${order}</td></tr>
-      <tr style="height:${mm(245)}"><td class="c tiny">半　切</td><td colspan="2" class="c tiny">Ｂ　４</td><td colspan="3" class="c tiny">大　角</td><td colspan="4" class="c tiny">四　切</td><td class="c tiny">六　切</td></tr>
-      <tr style="height:${mm(734)}"><td class="bot">枚</td><td colspan="2" class="bot">枚</td><td colspan="3" class="bot">枚</td><td colspan="4" class="bot">枚</td><td class="bot">枚</td></tr>
-      <tr style="height:${mm(245)}"><td class="c tiny">距　離</td><td colspan="2" class="c tiny">管電圧</td><td colspan="3" class="c tiny">管電流</td><td colspan="4" class="c tiny">時　間</td><td class="c tiny">フィルター</td></tr>
-      <tr style="height:${mm(735)}"><td class="bot tiny">cm</td><td colspan="2" class="bot tiny">kV</td><td colspan="3" class="bot tiny">mA</td><td colspan="4" class="bot tiny">Sec</td><td></td></tr>
-      <tr style="height:${mm(734)}"><td class="c">備考</td><td colspan="4"></td><td class="c v tiny">医師名</td>
-        <td colspan="4" class="c" style="white-space:nowrap;font-size:9.5pt">青木　りう子</td><td class="c v tiny">技師名</td><td></td></tr>
-    </table></div>`;
+      <tr style="height:${mm(245)}"><td class="tiny">Ｈ Ｄ</td></tr>`)}
+    ${tbl([581, 3776, 290, 1743], `<tr style="height:${mm(490)}"><td class="c v tiny">生年月日</td>
+        <td><div class="tabs"><span>${e(f.XERA)}</span><span>${e(f.XBY)}年</span><span>${e(f.XBM)}月</span><span>${e(f.XBD)}日</span></div></td>
+        <td class="c v tiny">住所</td><td></td></tr>`)}
+    ${tbl([581, ...F], `<tr style="height:${mm(247)}"><td rowspan="6" class="c v">指示事項</td>
+        <td colspan="5" class="c tiny" style="letter-spacing:.6em">撮影部位と方向を記入して下さい</td></tr>
+      <tr style="height:${mm(3917)}"><td colspan="5" class="order">${order}</td></tr>
+      <tr style="height:${mm(245)}"><td class="c tiny">半　切</td><td class="c tiny">Ｂ　４</td><td class="c tiny">大　角</td><td class="c tiny">四　切</td><td class="c tiny">六　切</td></tr>
+      <tr style="height:${mm(734)}"><td class="bot">枚</td><td class="bot">枚</td><td class="bot">枚</td><td class="bot">枚</td><td class="bot">枚</td></tr>
+      <tr style="height:${mm(245)}"><td class="c tiny">距　離</td><td class="c tiny">管電圧</td><td class="c tiny">管電流</td><td class="c tiny">時　間</td><td class="c tiny">フィルター</td></tr>
+      <tr style="height:${mm(735)}"><td class="bot tiny">cm</td><td class="bot tiny">kV</td><td class="bot tiny">mA</td><td class="bot tiny">Sec</td><td></td></tr>`)}
+    ${tbl([581, 2324, 290, 1742, 292, 1161], `<tr style="height:${mm(734)}"><td class="c">備考</td><td></td><td class="c v tiny">医師名</td>
+        <td class="c doc">青木　りう子</td><td class="c v tiny">技師名</td><td></td></tr>`)}
+    </div>`;
 }
 function renderXrayPrint(d) {
   // 左の1枚だけ。右側は切り取り線のみ残す
@@ -607,7 +612,7 @@ function zipStore(files) {
 
 <script>
 const $ = id => document.getElementById(id);
-const sel = { injuries: [], symptoms: [], progress: null, requests: new Set(), tender: [], motion: [], other: [], xrayFree: [] };
+const sel = { injuries: [], symptoms: [], progress: null, requests: new Set(), followUp: false, tender: [], motion: [], other: [], xrayFree: [] };
 let manual = false;
 
 const HIST_KEY = "referral.accHistory", HIST_MAX = 50;
@@ -798,8 +803,13 @@ const groups = [];
 function setupChips() {
   groups.push(chipGroup($("progChips"), PROGRESS, {
     isOn: it => sel.progress === it, toggle: it => { sel.progress = sel.progress === it ? null : it; } }));
-  groups.push(chipGroup($("reqChips"), REQUESTS, {
-    isOn: it => sel.requests.has(it), toggle: it => { sel.requests.has(it) ? sel.requests.delete(it) : sel.requests.add(it); } }));
+  groups.push(chipGroup($("reqChips"), [...REQUESTS, REQ_FOLLOWUP], {
+    isOn: it => it === REQ_FOLLOWUP ? sel.followUp : !sel.followUp && sel.requests.has(it),
+    toggle: it => {
+      if (it === REQ_FOLLOWUP) { sel.followUp = !sel.followUp; if (sel.followUp) sel.requests.clear(); return; }
+      sel.followUp = false;
+      sel.requests.has(it) ? sel.requests.delete(it) : sel.requests.add(it);
+    } }));
 }
 
 /* 圧痛・運動痛 */
@@ -944,7 +954,7 @@ function gather() {
     tender: sel.tender.slice(), motion: sel.motion.slice(), other: sel.other.slice(),
     startDate: $("startDate").value, progress: sel.progress ? sel.progress.text : "",
     requests: [...REQUESTS.filter(r => sel.requests.has(r)), ...[...sel.requests].filter(r => !REQUESTS.includes(r))],
-    reqFree: $("reqFree").value,
+    reqFree: $("reqFree").value, followUp: sel.followUp,
     purpose: $("purpose").value, note: [$("jiyu").checked ? JIYU_TEXT : "", $("note").value.trim()].filter(Boolean).join("\n"),
     xray: {
       make: !!CLINICS[$("clinic").value].xray && $("xrayMake").checked,
@@ -1046,7 +1056,7 @@ function init() {
     ["injDate", "startDate"].forEach(id => $(id).value = "");
     $("date").value = todayIso(); $("greet").checked = true; $("jiyu").checked = false;
     $("accSel").value = ""; $("symSel").value = ""; $("symSide").value = "";
-    sel.progress = null; sel.symptoms = []; sel.injuries = [];
+    sel.progress = null; sel.symptoms = []; sel.injuries = []; sel.followUp = false;
     $("injSide").value = ""; $("injPart").value = ""; syncInjType(); sel.tender = []; sel.motion = []; sel.other = []; $("oSel").value = ""; $("modeSel").value = "";
     sel.xrayFree = []; document.querySelectorAll(".xrayPreset").forEach(el => el.checked = false);
     $("xrayMake").checked = true; $("xrayNote").checked = true;
